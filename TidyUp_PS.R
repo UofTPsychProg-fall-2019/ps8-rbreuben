@@ -8,7 +8,7 @@ library(tidyverse)
 # reading in IAT data  ---------------------------------------------
 
 # use a tidyverse function to read in the included IAT_2019.csv file 
-tbl <- ...
+tbl <- read_csv("IAT.csv")
 
 # Removing unnecessary rows and columns  ---------------------------------------------
 # This data frame only contains 21 of the 454 available variables, but it's still too much
@@ -16,12 +16,16 @@ tbl <- ...
 # use tidyverse functions so that only the following variables are included: 'session_id',"genderidentity","raceomb_002","D_biep.White_Good_all","Mn_RT_all_3467",
 #       "edu_14","politicalid_7","STATE","att_7","tblacks_0to10","twhites_0to10","labels"
 
-tbl_clean <- ...
+#no variable called genderidentity, used gender instead
+
+tbl_clean <- select(tbl, session_id, gender,raceomb_002,D_biep.White_Good_all,Mn_RT_all_3467,
+                    edu_14,politicalid_7,STATE,att_7,tblacks_0to10,twhites_0to10,labels)
 
 # next, clean up the rows 
 # our primary dependent variable is D_biep.White_Good_all, but some subjects
 # don't have any data. Remove the rows with missing D_biep.White_Good_all entries 
-tbl_clean <- ...
+
+tbl_clean <- filter(tbl_clean, !is.na(D_biep.White_Good_all))
 
 # Renaming varialbles  ---------------------------------------------
 
@@ -39,7 +43,17 @@ tbl_clean <- ...
 # temp_b : tblacks_0to10 (temperature feelings black 1 "extremely cold" 10 "extremly warm")
 # temp_w : twhites_0to10 (temperature feelings black 1 "extremely cold" 10 "extremly warm")
 
-tbl_clean <- ...
+tbl_clean <- rename(tbl_clean,
+                           id = session_id, 
+                           race = raceomb_002,
+                           bias = D_biep.White_Good_all,
+                           rt = Mn_RT_all_3467,
+                           edu = edu_14,
+                           pol = politicalid_7,
+                           state = STATE,
+                           att = att_7,
+                           temp_b = tblacks_0to10,
+                           temp_w = twhites_0to10)
 
 #  missing values  ---------------------------------------------  
 
@@ -47,15 +61,17 @@ summary(tbl_clean)
 # some of our variables have missing values that aren't properly coded as missing  
 # recode missing values in gender and state
 
-tbl_clean$gender <- 
+tbl_clean$gender <- na_if(tbl_clean$gender, 'Missing')
 
-tbl_clean$state <- ...
+tbl_clean$state <- na_if(tbl_clean$state, 'Missing')
 
 # changing variable types  ---------------------------------------------  
 # next, convert id and all variables that are character types to factors
 # try to convert all variables at once using tidyverse functions
 
-tbl_clean <- ...
+factorVar <- c('id', 'gender', 'state')
+
+tbl_clean <- mutate_at(tbl_clean, factorVar, ~factor(.))
 
 # recoding variables  ---------------------------------------------  
 # participants were instructed to select all the gender idenities that apply to them
@@ -64,40 +80,72 @@ tbl_clean <- ...
 gender_count <- tbl_clean %>% group_by(gender) %>% tally()  
 
 # sort the output and then use indexing to print the 3 most common response (not inlcuding missing values)
-gender_count <- ...
-
+gender_count <- gender_count %>% arrange(desc(n)) %>% filter(!is.na(gender)) %>% .[1:3, ] %>% print()
+  
 # create a new variable that recodes gender to have 4 levels: the 3 most common responses and the others collapsed together
 # you can use the key provided on line 31 to understand the levels
 # check out recode documentation to see if there's a trick for setting defaults values for unspecified rows
 # *note that this excercise in data recoding doesn't reflect the instructors' views on gender identities...
-tbl_clean$gender4 <- ...
+tbl_clean$gender4 <- recode(tbl_clean$gender, "[1]" = "Male", "[2]" = "Female", "[5]" = "Genderqueer/Gender nonconforming", .default = "Other")
 
 # Now take a look at how highest obtained education is coded (key on line 35)
-edu_count <- tbl_clean %>% group_by(edu_14) %>% tally()  
+edu_count <- tbl_clean %>% group_by(edu) %>% tally()  
 
+# 1 "elementary" 2 "junior high" 3 "some high school" 4 "HS grad" 5 "some college" 6 "associate's" 
+#7 "bachelor's" 8 "some grad" 9 "MA" 10 "JD" 11 "MD" 12 "PHD" 13 "other advanced" 14 "MBA")
 #create a new variable that recodes education into: no highscool, some highschool, highschool graduate, some college, postsecondary degree, masters (MA & MBA), advanced degree
 #remember that the recode function isn't always the best solution for numeric variables
-tbl_clean$edu7 <- ...
+
+tbl_clean$edu7 <- recode(tbl_clean$edu, `1` = "No Highschool", `2` = "No Highschool", `3` = "Some Highschool", `4` = "Highschool Graduate",
+                         `5` = "Some College", `6` = "Postsecondary Degree", `7` = "Postsecondary Degree", `8` = "Postsecondary Degree",
+                         `9` = "Masters Degree", `14` = "Masters Degree", `10` = "Advanced Degree", `11` = "Advanced Degree",
+                         `12` = "Advanced Degree", `13` = "Advanced Degree") 
 
 # mutating variables ---------------------------------------------  
 # rewrite the above recoding steps so that they both occur within a single call of the mutate function
-tbl_clean <- ...
-  
+
+tbl_clean <- tbl_clean %>%
+  mutate(edu7 = case_when(edu < 3 ~ "No Highschool", 
+                          edu == 3 ~ "Some Highschool", 
+                          edu == 4 ~ "Highschool Graduate",
+                          edu == 5 ~ "Some College",
+                          edu >= 6 & edu < 9 ~ "Postsecondary Degree",
+                          edu == 9 | edu == 14 ~ "Masters Degree", 
+                          edu >= 10 & edu < 14 ~ "Advanced Degree",
+                          TRUE ~ NA_character_),
+         gender4 = case_when(gender == "[1]" ~ "Male", 
+                             gender == "[2]" ~ "Female", 
+                             gender == "[5]" ~ "Genderqueer/Gender nonconforming", 
+                             TRUE ~ "Other"))
+        
+        
 # filtering and math ---------------------------------------------  
 
 # using filtering, calculate and print the mean bias score for:
 
 # white men
-
+tbl_clean %>%
+  filter(gender4 == "Male" & race == 6) %>%
+  summarise(mean = mean(bias)) %>%
+  pull(mean)
 
 # white women
-
+tbl_clean %>%
+  filter(gender4 == "Female" & race == 6) %>%
+  summarise(mean = mean(bias)) %>%
+  pull(mean)
 
 # advanced degree holders who are men
-
+tbl_clean %>%
+  filter(edu7 == "Advanced Degree" & gender4 == "Male") %>%
+  summarise(mean = mean(bias)) %>%
+  pull(mean)
 
 # high school graduates who are men
-
+tbl_clean %>%
+  filter(edu7 == "Highschool Graduate" & gender4 == "Male") %>%
+  summarise(mean = mean(bias)) %>%
+  pull(mean)
 
 
 
